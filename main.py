@@ -104,7 +104,7 @@ def render_scene(i: int, scene: dict) -> Path:
     audio, clip = WORK / f"a{i}.mp3", WORK / f"c{i}.mp4"
     txt, out = WORK / f"t{i}.txt", WORK / f"s{i}.mp4"
 
-        make_voice(scene["text"], audio)
+    make_voice(scene["text"], audio)
     length = duration(audio) + 0.25
 
     if not (get_clip(scene["visual"], clip) or get_clip("abstract background", clip)):
