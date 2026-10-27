@@ -18,6 +18,7 @@ from pathlib import Path
 import edge_tts
 import requests
 
+from voice import make_voice
 # ---- Settings you can change ----
 NICHE = "mind-blowing science and space facts"
 MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash"]  # tried in order
@@ -103,7 +104,7 @@ def render_scene(i: int, scene: dict) -> Path:
     audio, clip = WORK / f"a{i}.mp3", WORK / f"c{i}.mp4"
     txt, out = WORK / f"t{i}.txt", WORK / f"s{i}.mp4"
 
-    asyncio.run(_tts(scene["text"], audio))
+        make_voice(scene["text"], audio)
     length = duration(audio) + 0.25
 
     if not (get_clip(scene["visual"], clip) or get_clip("abstract background", clip)):
