@@ -1,0 +1,59 @@
+# Save this file in your repo at: .github/workflows/post.yml
+name: make-short
+
+on:
+  schedule:
+    - cron: "0 14 * * *"   # daily, 14:00 UTC
+  workflow_dispatch:        # lets you press "Run workflow" to test
+
+permissions:
+  contents: write
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Make one Short
+        run: python main.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+
+      - name: Publish as a Release (hosts the video file)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "short-${{ github.run_number }}" out/short.mp4 \
+            --title "$(cat out/title.txt)" --notes-file out/notes.txt
+
+      - name: Tell Make.com to upload it to YouTube
+        env:
+          HOOK: ${{ secrets.MAKE_WEBHOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "No MAKE_WEBHOOK_URL set, skipping upload"; exit 0; fi
+          jq -n \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/short-${{ github.run_number }}/short.mp4" \
+            --rawfile title out/title.txt \
+            --rawfile description out/description.txt \
+            '{url: $url, title: $title, description: $description}' \
+          | curl -fsS -X POST -H "Content-Type: application/json" -d @- "$HOOK"
+
+      - name: Save topic history
+        run: |
+          git config user.name "shorts-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add history.json
+          git diff --cached --quiet || (git commit -m "update history" && git push)
