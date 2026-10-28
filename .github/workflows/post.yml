@@ -27,7 +27,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Make one Short
-        run: python main.py
+        run: |
+          for i in 1 2 3; do
+            python main.py && exit 0
+            echo "Attempt $i failed, waiting 60 seconds"
+            sleep 60
+          done
+          exit 1
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
