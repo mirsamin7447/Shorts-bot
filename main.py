@@ -21,7 +21,7 @@ import requests
 from voice import make_voice
 # ---- Settings you can change ----
 NICHE = "mind-blowing science and space facts"
-MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash"]  # tried in order
+MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"]
 VOICE = "en-US-GuyNeural"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 # ----------------------------------
