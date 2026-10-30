@@ -15,8 +15,9 @@ import requests
 
 GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
 GEMINI_VOICE = "Charon"  # deep, informative. Other options: Orus, Gacrux, Algieba, Fenrir
-STYLE = ("Say in a deep, calm, awe-struck documentary narrator voice, like a space film "
-         "trailer. Measured and dramatic, with short natural pauses")
+STYLE = ("Say in a deep, confident, awe-struck documentary narrator voice, like a space "
+         "film trailer. Slightly brisk and energetic pace, dramatic, with very short pauses")
+SPEED = 1.10  # extra speed-up applied to every voice (1.0 = normal)
 EDGE_VOICES = ["en-US-GuyNeural", "en-US-AriaNeural"]
 
 _gemini_failed = False
@@ -89,7 +90,7 @@ async def _edge(text: str, path: Path, voice: str) -> None:
     await edge_tts.Communicate(text, voice, rate="+2%").save(str(path))
 
 
-def make_voice(text: str, path: Path) -> None:
+def _make_voice_raw(text: str, path: Path) -> None:
     global _edge_failed
     if not _gemini_failed and _gemini(text, path):
         return
@@ -117,3 +118,15 @@ def make_voice(text: str, path: Path) -> None:
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), str(path)], check=True
     )
+
+
+def make_voice(text: str, path: Path) -> None:
+    """Create the narration for one scene and speed it up slightly (pitch is kept)."""
+    _make_voice_raw(text, path)
+    fast = path.with_name(path.stem + "_fast.mp3")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+         "-af", f"atempo={SPEED}", "-ar", "44100", str(fast)],
+        check=True,
+    )
+    fast.replace(path)
