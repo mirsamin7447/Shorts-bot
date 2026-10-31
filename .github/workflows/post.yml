@@ -3,8 +3,9 @@ name: make-short
 
 on:
   schedule:
-    - cron: "0 14 * * *"   # daily, 14:00 UTC
-    - cron: "0 2 * * *"    # daily, 02:00 UTC
+    - cron: "30 2 * * *"   # 8:00 am IST
+    - cron: "30 11 * * *"  # 5:00 pm IST
+    - cron: "0 14 * * *"   # 7:30 pm IST
   workflow_dispatch:        # lets you press "Run workflow" to test
 
 permissions:
