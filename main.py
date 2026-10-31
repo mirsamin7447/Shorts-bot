@@ -8,6 +8,7 @@ Needs ffmpeg. Secrets come from environment variables (see SETUP.md).
 import json
 import os
 import random
+from datetime import datetime, timezone
 import re
 import subprocess
 import textwrap
@@ -22,13 +23,20 @@ NICHE = "mind-blowing science and space facts"
 CHANNEL = "COSMIC BITES"  # small watermark shown at the top of every video
 MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"]  # tried in order
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FORMATS = [  # a random one is picked each run so videos don't feel repetitive
+FORMATS = [  # a random one is picked for the evening slot so videos don't feel repetitive
     "a mind-blowing scale comparison (how big, fast, old, hot or far something is)",
     "myth vs truth: a common belief that is actually wrong",
     "what would actually happen if... (a strange hypothetical, answered with real science)",
     "a weird-but-true fact that sounds fake",
     "a mystery scientists still cannot fully explain",
 ]
+# Each scheduled run uses a different format, so the channel mixes video types.
+# Keys are UTC hours of the cron times in post.yml: 02:30 (8 am IST), 11:30 (5 pm IST), 14:00 (7:30 pm IST).
+SLOT_FORMATS = {
+    2: "quick quiz: open with a surprising science question, make the viewer guess, reveal the answer in the final scene",
+    11: "top 3 countdown: three surprising space facts ranked from 3 to 1, the number 1 fact is the payoff",
+    14: None,  # evening slot uses the rotating FORMATS above
+}
 MAX_BYTES = 4_700_000  # Make.com's free plan accepts files up to 5 MB
 # ----------------------------------
 
@@ -55,9 +63,14 @@ def ask_ai(prompt: str) -> str:
     raise RuntimeError(f"All Gemini models failed. Last error: {last}")
 
 
+def pick_format() -> str:
+    slot = SLOT_FORMATS.get(datetime.now(timezone.utc).hour)
+    return slot or random.choice(FORMATS)
+
+
 def generate_script(history: list) -> dict:
     used = [h["topic"] for h in history[-60:]]
-    fmt = random.choice(FORMATS)
+    fmt = pick_format()
     raw = ask_ai(
         f"You are the writer of cinematic, trailer-style YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
