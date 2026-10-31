@@ -62,31 +62,32 @@ def generate_script(history: list) -> dict:
         f"You are the writer of cinematic, trailer-style YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
         f"Pick a fresh, specific topic. Do NOT reuse these topics: {used}\n\n"
-        "Length: 28-36 seconds when read at a brisk pace, about 75-90 spoken words in total.\n"
+        "Length: 18-24 seconds when read at a fast pace, about 45-60 spoken words in total.\n"
         "Style: a deep documentary narrator. Vivid, sensory, dramatic. Short punchy sentences "
         "and fragments. Speak directly to the viewer using 'you'.\n"
         "Structure:\n"
-        "1. COLD OPEN (first scene, max 11 words): a shocking claim or question that creates an "
-        "open loop. Never start with 'Did you know' or 'Imagine'.\n"
-        "2. TENSION: 4-6 scenes. Each reveals a new surprising detail with a real number or a "
-        "comparison people can picture. Around the middle, add a twist that makes them rethink.\n"
+        "1. COLD OPEN (first scene, max 9 words): the most shocking claim in the whole video, "
+        "stated as a bold fact or a question that creates an open loop the viewer must resolve. "
+        "Never start with 'Did you know', 'Imagine' or 'Welcome'.\n"
+        "2. TENSION: 3-5 scenes. Each reveals a new surprising detail with a real number or a "
+        "comparison people can picture. Add one twist that makes them rethink.\n"
         "3. PAYOFF: the most mind-blowing fact, near the end.\n"
         "4. LOOP: the final line should flow naturally back into the opening line so viewers "
         "rewatch. Do not say follow or subscribe.\n"
         "Rules: only facts you are confident are true (never invent statistics). Simple words a "
-        "12-year-old understands. Each scene is 5-11 words, written the way a narrator speaks.\n\n"
+        "12-year-old understands. Each scene is 4-9 words, written the way a narrator speaks.\n\n"
         "Return ONLY JSON with keys:\n"
         '"topic" (short), "title" (curiosity-driven, under 55 chars, truthful), '
         '"description" (2 sentences with the main keywords), '
         '"tags" (6-8 keywords, no # symbol),\n'
-        '"scenes": list of 8-11 objects {"text": words spoken in this scene, '
+        '"scenes": list of 5-8 objects {"text": words spoken in this scene, '
         '"visual": 2-3 word stock-video search that literally shows it, cinematic and concrete, '
         'such as "nebula timelapse", "aerial mountains", "ocean storm", "rocket launch", '
         '"visual_alt": one simple backup word such as "galaxy"}.'
     )
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
     data = json.loads(raw)
-    assert 5 <= len(data["scenes"]) <= 14, "unexpected scene count"
+    assert 4 <= len(data["scenes"]) <= 10, "unexpected scene count"
     return data
 
 
