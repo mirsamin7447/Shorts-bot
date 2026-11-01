@@ -16,7 +16,7 @@ import edge_tts
 import requests
 
 # ---- Voice settings ----
-KOKORO_VOICE = "am_adam"  # "af_sarah", "am_adam" or "bm_lewis"
+KOKORO_VOICE = "af_sarah"  # "af_sarah", "am_adam" or "bm_lewis"
 GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
 GEMINI_VOICE = "Charon"
 STYLE = ("Say in a deep, confident, awe-struck documentary narrator voice, like a space "
