@@ -1,3 +1,6 @@
 edge-tts
 gTTS
 requests
+kokoro>=0.9
+soundfile
+numpy
