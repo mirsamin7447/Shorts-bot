@@ -21,6 +21,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
+      - name: Cache Kokoro voice model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-hf-${{ runner.os }}-v1
 
       - name: Install system packages
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
