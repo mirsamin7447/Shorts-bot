@@ -1,6 +1,8 @@
 """
 Narration voice with automatic fallbacks:
-Gemini TTS (natural, directed style, free) -> Microsoft Edge -> Google TTS -> offline espeak.
+Kokoro (free, offline, no quota) -> Gemini TTS -> Microsoft Edge -> Google TTS -> offline espeak.
+Kokoro voices: af_sarah (Sarah, American female), am_adam (Adam, American male),
+bm_lewis (Lewis, British male).
 """
 import asyncio
 import base64
@@ -13,19 +15,53 @@ from pathlib import Path
 import edge_tts
 import requests
 
+# ---- Voice settings ----
+KOKORO_VOICE = "am_adam"  # "af_sarah", "am_adam" or "bm_lewis"
 GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
-GEMINI_VOICE = "Charon"  # deep, informative. Other options: Orus, Gacrux, Algieba, Fenrir
+GEMINI_VOICE = "Charon"
 STYLE = ("Say in a deep, confident, awe-struck documentary narrator voice, like a space "
-         "film trailer. Slightly brisk and energetic pace, dramatic, with very short pauses")
-SPEED = 1.10  # extra speed-up applied to every voice (1.0 = normal)
+         "film trailer. Fast, energetic, punchy pace, dramatic, with very short pauses")
 EDGE_VOICES = ["en-US-GuyNeural", "en-US-AriaNeural"]
+SPEED = 1.20  # extra speed-up applied to every voice (1.0 = normal)
+# ------------------------
 
+_kokoro_pipe = None
+_kokoro_failed = False
 _gemini_failed = False
 _edge_failed = False
 
 
 def _ok(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 1000
+
+
+def _kokoro(text: str, path: Path) -> bool:
+    """Kokoro runs locally. Its model is downloaded once per run from Hugging Face."""
+    global _kokoro_pipe, _kokoro_failed
+    if _kokoro_failed:
+        return False
+    try:
+        import numpy as np
+        import soundfile as sf
+        from kokoro import KPipeline
+
+        if _kokoro_pipe is None:
+            lang = "b" if KOKORO_VOICE.startswith("b") else "a"  # b = British, a = American
+            _kokoro_pipe = KPipeline(lang_code=lang)
+        chunks = [audio for _, _, audio in _kokoro_pipe(text, voice=KOKORO_VOICE, speed=1.0)]
+        if not chunks:
+            raise RuntimeError("no audio returned")
+        wav = path.with_suffix(".wav")
+        sf.write(str(wav), np.concatenate(chunks), 24000)
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ar", "44100", str(path)],
+            check=True,
+        )
+        return _ok(path)
+    except Exception as e:
+        print("Kokoro failed:", type(e).__name__, str(e)[:200])
+        _kokoro_failed = True
+        return False
 
 
 def _pcm_to_mp3(pcm: bytes, rate: int, path: Path) -> None:
@@ -44,7 +80,7 @@ def _pcm_to_mp3(pcm: bytes, rate: int, path: Path) -> None:
 def _gemini(text: str, path: Path) -> bool:
     global _gemini_failed
     key = os.environ.get("GEMINI_API_KEY")
-    if not key:
+    if not key or _gemini_failed:
         return False
     body = {
         "contents": [{"parts": [{"text": f"{STYLE}: {text}"}]}],
@@ -92,7 +128,9 @@ async def _edge(text: str, path: Path, voice: str) -> None:
 
 def _make_voice_raw(text: str, path: Path) -> None:
     global _edge_failed
-    if not _gemini_failed and _gemini(text, path):
+    if _kokoro(text, path):
+        return
+    if _gemini(text, path):
         return
     if not _edge_failed:
         errors = []
