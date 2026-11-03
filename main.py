@@ -23,7 +23,7 @@ NICHE = "mind-blowing science and space facts"
 CHANNEL = "COSMIC BITES"  # small watermark shown at the top of every video
 MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"]  # tried in order
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FORMATS = [  # a random one is picked for the evening slot so videos don't feel repetitive
+FORMATS = [  # a random one is picked each run so videos don't feel repetitive
     "a mind-blowing scale comparison (how big, fast, old, hot or far something is)",
     "myth vs truth: a common belief that is actually wrong",
     "what would actually happen if... (a strange hypothetical, answered with real science)",
@@ -35,14 +35,44 @@ FORMATS = [  # a random one is picked for the evening slot so videos don't feel 
 SLOT_FORMATS = {
     2: "quick quiz: open with a surprising science question, make the viewer guess, reveal the answer in the final scene",
     11: "top 3 countdown: three surprising space facts ranked from 3 to 1, the number 1 fact is the payoff",
-    14: None,  # evening slot uses the rotating FORMATS above
+    14: None,  # evening slot uses the rotating FORMATS below
 }
+DEEPSEEK_EVERY = 3  # Gemini writes most scripts; DeepSeek writes every 3rd one
 MAX_BYTES = 4_700_000  # Make.com's free plan accepts files up to 5 MB
 # ----------------------------------
 
 WORK = Path("work")
 WORK.mkdir(exist_ok=True)
 HISTORY = Path("history.json")
+
+
+def ask_deepseek(prompt: str) -> str:
+    """DeepSeek API (OpenAI-compatible). Needs the DEEPSEEK_API_KEY secret."""
+    r = requests.post(
+        "https://api.deepseek.com/chat/completions",
+        headers={"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
+                 "Content-Type": "application/json"},
+        json={"model": "deepseek-chat",
+              "messages": [{"role": "user", "content": prompt}],
+              "response_format": {"type": "json_object"},
+              "temperature": 1.0},
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"].strip()
+
+
+def ask_script(prompt: str, history: list) -> str:
+    """Gemini writes most scripts. DeepSeek writes every DEEPSEEK_EVERY-th one, if its key is set.
+    If DeepSeek fails, Gemini writes that script instead."""
+    if os.environ.get("DEEPSEEK_API_KEY") and len(history) % DEEPSEEK_EVERY == DEEPSEEK_EVERY - 1:
+        try:
+            print("Writer: DeepSeek")
+            return ask_deepseek(prompt)
+        except Exception as e:
+            print("DeepSeek failed, using Gemini:", type(e).__name__, str(e)[:150])
+    print("Writer: Gemini")
+    return ask_ai(prompt)
 
 
 def ask_ai(prompt: str) -> str:
@@ -71,7 +101,7 @@ def pick_format() -> str:
 def generate_script(history: list) -> dict:
     used = [h["topic"] for h in history[-60:]]
     fmt = pick_format()
-    raw = ask_ai(
+    raw = ask_script(
         f"You are the writer of cinematic, trailer-style YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
         f"Pick a fresh, specific topic. Do NOT reuse these topics: {used}\n\n"
@@ -96,11 +126,12 @@ def generate_script(history: list) -> dict:
         '"scenes": list of 5-8 objects {"text": words spoken in this scene, '
         '"visual": 2-3 word stock-video search that literally shows it, cinematic and concrete, '
         'such as "nebula timelapse", "aerial mountains", "ocean storm", "rocket launch", '
-        '"visual_alt": one simple backup word such as "galaxy"}.'
+        '"visual_alt": one simple backup word such as "galaxy"}.',
+        history,
     )
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
     data = json.loads(raw)
-    assert 4 <= len(data["scenes"]) <= 10, "unexpected scene count"
+    assert 5 <= len(data["scenes"]) <= 14, "unexpected scene count"
     return data
 
 
@@ -271,7 +302,12 @@ def finish(src: Path, dst: Path) -> None:
 
 def main() -> None:
     history = json.loads(HISTORY.read_text()) if HISTORY.exists() else []
-    script = generate_script(history)
+    script_file = os.environ.get("SCRIPT_FILE", "").strip()
+    if script_file:  # render a script you wrote yourself, e.g. earth_facts.json
+        script = json.loads(Path(script_file).read_text(encoding="utf-8"))
+        print("Using script file:", script_file)
+    else:
+        script = generate_script(history)
     print("Topic:", script["topic"])
 
     parts = [render_scene(i, s) for i, s in enumerate(script["scenes"])]
