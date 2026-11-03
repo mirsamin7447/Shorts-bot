@@ -7,6 +7,11 @@ on:
     - cron: "30 11 * * *"  # 5:00 pm IST
     - cron: "0 14 * * *"   # 7:30 pm IST
   workflow_dispatch:        # lets you press "Run workflow" to test
+    inputs:
+      script_file:
+        description: "Optional script file in the repo, e.g. earth_facts.json (leave empty for auto)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -45,7 +50,9 @@ jobs:
           exit 1
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          SCRIPT_FILE: ${{ github.event.inputs.script_file }}
 
       - name: Publish as a Release (hosts the video file)
         env:
