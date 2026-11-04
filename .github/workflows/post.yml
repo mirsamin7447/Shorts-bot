@@ -57,17 +57,26 @@ jobs:
       - name: Publish as a Release (hosts the video file)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: short-${{ github.run_number }}-${{ github.run_attempt }}
         run: |
-          gh release create "short-${{ github.run_number }}" out/short.mp4 \
-            --title "$(cat out/title.txt)" --notes-file out/notes.txt
+          for i in 1 2 3; do
+            if gh release create "$TAG" out/short.mp4 \
+                --title "$(cat out/title.txt)" --notes-file out/notes.txt; then
+              exit 0
+            fi
+            echo "Release attempt $i failed, waiting 30 seconds"
+            sleep 30
+          done
+          exit 1
 
       - name: Tell Make.com to upload it to YouTube
         env:
           HOOK: ${{ secrets.MAKE_WEBHOOK_URL }}
+          TAG: short-${{ github.run_number }}-${{ github.run_attempt }}
         run: |
           if [ -z "$HOOK" ]; then echo "No MAKE_WEBHOOK_URL set, skipping upload"; exit 0; fi
           jq -n \
-            --arg url "https://github.com/${{ github.repository }}/releases/download/short-${{ github.run_number }}/short.mp4" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/$TAG/short.mp4" \
             --rawfile title out/title.txt \
             --rawfile description out/description.txt \
             '{url: $url, title: $title, description: $description}' \
