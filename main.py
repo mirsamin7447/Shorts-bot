@@ -1,17 +1,17 @@
 """
 Fully automatic cinematic YouTube Shorts bot.
 One run = one Short: script -> voiceover -> stock footage -> grading + captions -> music mix.
-The finished video and its title/description are saved in out/. The workflow then
+The finished video, title, description and hashtags are saved in out/. The workflow then
 publishes them as a GitHub Release and pings a Make.com webhook that uploads them.
 Needs ffmpeg. Secrets come from environment variables (see SETUP.md).
 """
 import json
 import os
 import random
-from datetime import datetime, timezone
 import re
 import subprocess
 import textwrap
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -23,7 +23,7 @@ NICHE = "mind-blowing science and space facts"
 CHANNEL = "COSMIC BITES"  # small watermark shown at the top of every video
 MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"]  # tried in order
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FORMATS = [  # a random one is picked each run so videos don't feel repetitive
+FORMATS = [  # a random one is picked for the evening slot so videos don't feel repetitive
     "a mind-blowing scale comparison (how big, fast, old, hot or far something is)",
     "myth vs truth: a common belief that is actually wrong",
     "what would actually happen if... (a strange hypothetical, answered with real science)",
@@ -35,44 +35,17 @@ FORMATS = [  # a random one is picked each run so videos don't feel repetitive
 SLOT_FORMATS = {
     2: "quick quiz: open with a surprising science question, make the viewer guess, reveal the answer in the final scene",
     11: "top 3 countdown: three surprising space facts ranked from 3 to 1, the number 1 fact is the payoff",
-    14: None,  # evening slot uses the rotating FORMATS below
+    14: None,  # evening slot uses the rotating FORMATS above
 }
-DEEPSEEK_EVERY = 3  # Gemini writes most scripts; DeepSeek writes every 3rd one
+# Hashtags: every video gets 2-3 tags about its own topic, plus these general ones.
+GENERAL_HASHTAGS = ["science", "space", "facts"]
+MAX_HASHTAGS = 5  # #Shorts counts toward this limit
 MAX_BYTES = 4_700_000  # Make.com's free plan accepts files up to 5 MB
 # ----------------------------------
 
 WORK = Path("work")
 WORK.mkdir(exist_ok=True)
 HISTORY = Path("history.json")
-
-
-def ask_deepseek(prompt: str) -> str:
-    """DeepSeek API (OpenAI-compatible). Needs the DEEPSEEK_API_KEY secret."""
-    r = requests.post(
-        "https://api.deepseek.com/chat/completions",
-        headers={"Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}",
-                 "Content-Type": "application/json"},
-        json={"model": "deepseek-chat",
-              "messages": [{"role": "user", "content": prompt}],
-              "response_format": {"type": "json_object"},
-              "temperature": 1.0},
-        timeout=120,
-    )
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"].strip()
-
-
-def ask_script(prompt: str, history: list) -> str:
-    """Gemini writes most scripts. DeepSeek writes every DEEPSEEK_EVERY-th one, if its key is set.
-    If DeepSeek fails, Gemini writes that script instead."""
-    if os.environ.get("DEEPSEEK_API_KEY") and len(history) % DEEPSEEK_EVERY == DEEPSEEK_EVERY - 1:
-        try:
-            print("Writer: DeepSeek")
-            return ask_deepseek(prompt)
-        except Exception as e:
-            print("DeepSeek failed, using Gemini:", type(e).__name__, str(e)[:150])
-    print("Writer: Gemini")
-    return ask_ai(prompt)
 
 
 def ask_ai(prompt: str) -> str:
@@ -98,10 +71,27 @@ def pick_format() -> str:
     return slot or random.choice(FORMATS)
 
 
+def clean_tag(word: str) -> str:
+    """Turn a phrase into a hashtag body: letters and digits only, e.g. 'neutron stars' -> 'neutronstars'."""
+    return re.sub(r"[^A-Za-z0-9]", "", word)
+
+
+def build_hashtags(script: dict) -> list:
+    """2-3 topic hashtags from the script, then general ones, capped at MAX_HASHTAGS, no duplicates."""
+    topic = [clean_tag(t) for t in script.get("hashtags", []) if clean_tag(t)]
+    if not topic:  # fallback for scripts without a hashtags list
+        topic = [clean_tag(t) for t in script.get("tags", []) if clean_tag(t)][:3]
+    tags = []
+    for t in topic[:3] + GENERAL_HASHTAGS:
+        if t.lower() not in [x.lower() for x in tags]:
+            tags.append(t)
+    return [f"#{t}" for t in tags[: MAX_HASHTAGS - 1]] + ["#Shorts"]
+
+
 def generate_script(history: list) -> dict:
     used = [h["topic"] for h in history[-60:]]
     fmt = pick_format()
-    raw = ask_script(
+    raw = ask_ai(
         f"You are the writer of cinematic, trailer-style YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
         f"Pick a fresh, specific topic. Do NOT reuse these topics: {used}\n\n"
@@ -122,16 +112,17 @@ def generate_script(history: list) -> dict:
         "Return ONLY JSON with keys:\n"
         '"topic" (short), "title" (curiosity-driven, under 55 chars, truthful), '
         '"description" (2 sentences with the main keywords), '
-        '"tags" (6-8 keywords, no # symbol),\n'
+        '"tags" (6-8 keywords, no # symbol), '
+        '"hashtags" (2-3 hashtags about this exact topic, single words or short phrases, '
+        'no # symbol, e.g. "neutronstars", "spacefacts"),\n'
         '"scenes": list of 5-8 objects {"text": words spoken in this scene, '
         '"visual": 2-3 word stock-video search that literally shows it, cinematic and concrete, '
         'such as "nebula timelapse", "aerial mountains", "ocean storm", "rocket launch", '
-        '"visual_alt": one simple backup word such as "galaxy"}.',
-        history,
+        '"visual_alt": one simple backup word such as "galaxy"}.'
     )
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
     data = json.loads(raw)
-    assert 5 <= len(data["scenes"]) <= 14, "unexpected scene count"
+    assert 4 <= len(data["scenes"]) <= 10, "unexpected scene count"
     return data
 
 
@@ -317,19 +308,21 @@ def main() -> None:
     out.mkdir(exist_ok=True)
     finish(final, out / "short.mp4")
     title = f"{script['title']} #Shorts"
-    hashtags = " ".join("#" + t.replace(" ", "") for t in script["tags"][:5])
+    hashtags = build_hashtags(script)
     (out / "title.txt").write_text(title)
     (out / "description.txt").write_text(
         f"{script['description']}\n\nFollow for a new mind-blowing fact every day!\n\n"
-        f"{hashtags} #Shorts\n"
+        f"{' '.join(hashtags)}\n"
     )
     (out / "notes.txt").write_text(
         f"TITLE (copy this):\n{title}\n\n"
-        f"DESCRIPTION (copy this):\n{script['description']}\n\n{hashtags} #Shorts\n"
+        f"DESCRIPTION (copy this):\n{script['description']}\n\n"
+        f"Follow for a new mind-blowing fact every day!\n\n{' '.join(hashtags)}\n"
     )
 
     history.append({"topic": script["topic"], "title": script["title"]})
     HISTORY.write_text(json.dumps(history, indent=2))
+    print("Hashtags:", " ".join(hashtags))
     print("Saved out/short.mp4")
 
 
