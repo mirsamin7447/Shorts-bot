@@ -1,6 +1,6 @@
 """
-Fully automatic cinematic YouTube Shorts bot.
-One run = one Short: script -> voiceover -> stock footage -> grading + captions -> music mix.
+Fully automatic eerie mystery Shorts bot (episodes, cliffhangers, viewer choices).
+One run = one Short: script -> voiceover -> stock footage -> bold captions -> music mix.
 The finished video, title, description and hashtags are saved in out/. The workflow then
 publishes them as a GitHub Release and pings a Make.com webhook that uploads them.
 Needs ffmpeg. Secrets come from environment variables (see SETUP.md).
@@ -19,27 +19,28 @@ import requests
 from voice import make_voice
 
 # ---- Settings you can change ----
-NICHE = "mind-blowing science and space facts"
+NICHE = "short fictional stories about the universe: stars, black holes, planets and the unknown"
 CHANNEL = "COSMIC BITES"  # small watermark shown at the top of every video
 MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"]  # tried in order
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FORMATS = [  # a random one is picked for the evening slot so videos don't feel repetitive
-    "a mind-blowing scale comparison (how big, fast, old, hot or far something is)",
-    "myth vs truth: a common belief that is actually wrong",
-    "what would actually happen if... (a strange hypothetical, answered with real science)",
-    "a weird-but-true fact that sounds fake",
-    "a mystery scientists still cannot fully explain",
+    "a story told from a spaceship crew's point of view that ends on a cliffhanger",
+    "a lone astronaut or space probe discovers something strange in deep space, with a twist ending",
+    "a cosmic story told by a star or planet as it lives out billions of years",
+    "a calm narrator describes the far future of the universe and ends on an awe-inspiring twist",
+    "episode 1 of a 3-part space mystery that ends with 'Part 2 next'",
 ]
 # Each scheduled run uses a different format, so the channel mixes video types.
 # Keys are UTC hours of the cron times in post.yml: 02:30 (8 am IST), 11:30 (5 pm IST), 14:00 (7:30 pm IST).
 SLOT_FORMATS = {
-    2: "quick quiz: open with a surprising science question, make the viewer guess, reveal the answer in the final scene",
-    11: "top 3 countdown: three surprising space facts ranked from 3 to 1, the number 1 fact is the payoff",
+    2: "cold-open micro-story about a star or planet: a one-line hook, three beats, then a twist",
+    11: "choose-your-ending space story: tell the setup, then the last scene asks viewers to comment A or B for what happens",
     14: None,  # evening slot uses the rotating FORMATS above
 }
-# Hashtags: every video gets 2-3 tags about its own topic, plus these general ones.
-GENERAL_HASHTAGS = ["science", "space", "facts"]
+# Hashtags: every video gets 2-3 tags about its own story, plus these general ones.
+GENERAL_HASHTAGS = ["space", "universe", "sciencefiction"]
 MAX_HASHTAGS = 5  # #Shorts counts toward this limit
+VIDEO_W, VIDEO_H = 720, 1280  # 720x1280 keeps files under Make.com's 5 MB limit. Use 1080, 1920 on a paid Make plan.
 MAX_BYTES = 4_700_000  # Make.com's free plan accepts files up to 5 MB
 # ----------------------------------
 
@@ -72,12 +73,12 @@ def pick_format() -> str:
 
 
 def clean_tag(word: str) -> str:
-    """Turn a phrase into a hashtag body: letters and digits only, e.g. 'neutron stars' -> 'neutronstars'."""
+    """Turn a phrase into a hashtag body: letters and digits only, e.g. 'dark forest' -> 'darkforest'."""
     return re.sub(r"[^A-Za-z0-9]", "", word)
 
 
 def build_hashtags(script: dict) -> list:
-    """2-3 topic hashtags from the script, then general ones, capped at MAX_HASHTAGS, no duplicates."""
+    """2-3 story hashtags from the script, then general ones, capped at MAX_HASHTAGS, no duplicates."""
     topic = [clean_tag(t) for t in script.get("hashtags", []) if clean_tag(t)]
     if not topic:  # fallback for scripts without a hashtags list
         topic = [clean_tag(t) for t in script.get("tags", []) if clean_tag(t)][:3]
@@ -92,37 +93,38 @@ def generate_script(history: list) -> dict:
     used = [h["topic"] for h in history[-60:]]
     fmt = pick_format()
     raw = ask_ai(
-        f"You are the writer of cinematic, trailer-style YouTube Shorts for a channel about {NICHE}.\n"
+        f"You write awe-inspiring, cinematic YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
-        f"Pick a fresh, specific topic. Do NOT reuse these topics: {used}\n\n"
-        "Length: 18-24 seconds when read at a fast pace, about 45-60 spoken words in total.\n"
-        "Style: a deep documentary narrator. Vivid, sensory, dramatic. Short punchy sentences "
-        "and fragments. Speak directly to the viewer using 'you'.\n"
+        f"Pick a fresh, original story. Do NOT reuse these topics: {used}\n\n"
+        "Length: 30-40 seconds when read at a steady pace, about 75-100 spoken words in total.\n"
+        "Style: a calm, wondrous narrator. Short sentences. Build wonder and tension, then one sharp twist. "
+        "Speak directly to the viewer using 'you'.\n"
         "Structure:\n"
-        "1. COLD OPEN (first scene, max 9 words): the most shocking claim in the whole video, "
-        "stated as a bold fact or a question that creates an open loop the viewer must resolve. "
-        "Never start with 'Did you know', 'Imagine' or 'Welcome'.\n"
-        "2. TENSION: 3-5 scenes. Each reveals a new surprising detail with a real number or a "
-        "comparison people can picture. Add one twist that makes them rethink.\n"
-        "3. PAYOFF: the most mind-blowing fact, near the end.\n"
-        "4. LOOP: the final line should flow naturally back into the opening line so viewers "
-        "rewatch. Do not say follow or subscribe.\n"
-        "Rules: only facts you are confident are true (never invent statistics). Simple words a "
-        "12-year-old understands. Each scene is 4-9 words, written the way a narrator speaks.\n\n"
+        "1. HOOK (first scene, max 9 words): a short, bold statement that makes the viewer "
+        "need to know more. Never start with 'Did you know', 'Imagine' or 'Welcome'.\n"
+        "2. BUILD: 4-7 scenes. Each adds one more astonishing detail, with a real number or scale where possible.\n"
+        "CHARACTERS: the story can have up to 3 characters who speak in their own scenes. "
+        "Use speaker 'narrator' for narration. Use 'female', 'male_brit', 'young', 'old' or 'gruff' "
+        "for a character's spoken lines, and keep the same speaker for the same character.\n"
+        "3. TWIST: the last story beat changes what the viewer thought was happening.\n"
+        "4. ENDING: either a cliffhanger, or a question that asks viewers to comment their choice "
+        "(for example 'Comment A if you open the door, B if you run'). Do not say follow or subscribe.\n"
+        "Rules: this is fiction, so never present invented events as real facts. Keep the science in the story accurate. "
+        "Simple words anyone can follow. Each scene is 4-9 words, written the way a narrator speaks.\n\n"
         "Return ONLY JSON with keys:\n"
-        '"topic" (short), "title" (curiosity-driven, under 55 chars, truthful), '
-        '"description" (2 sentences with the main keywords), '
+        '"topic" (short story name), "title" (bold and curiosity-driven, under 55 chars), '
+        '"description" (2 sentences describing the story, and saying it is a fictional story), '
         '"tags" (6-8 keywords, no # symbol), '
-        '"hashtags" (2-3 hashtags about this exact topic, single words or short phrases, '
-        'no # symbol, e.g. "neutronstars", "spacefacts"),\n'
-        '"scenes": list of 5-8 objects {"text": words spoken in this scene, '
-        '"visual": 2-3 word stock-video search that literally shows it, cinematic and concrete, '
-        'such as "nebula timelapse", "aerial mountains", "ocean storm", "rocket launch", '
+        '"hashtags" (2-3 hashtags about this exact story, single words or short phrases, '
+        'no # symbol, e.g. "lighthousemystery", "nightstory"),\n'
+        '"scenes": list of 6-12 objects {"speaker": one speaker role from the rules above, "text": words spoken in this scene, '
+        '"visual": 2-3 word stock-video search that matches the mood, such as "milky way timelapse", '
+        '"black hole", "nebula", "space station", "meteor shower", "galaxy", "earth from space", '
         '"visual_alt": one simple backup word such as "galaxy"}.'
     )
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
     data = json.loads(raw)
-    assert 4 <= len(data["scenes"]) <= 10, "unexpected scene count"
+    assert 5 <= len(data["scenes"]) <= 14, "unexpected scene count"
     return data
 
 
@@ -168,11 +170,12 @@ def get_clip(query: str, dest: Path, min_dur: float = 0.0) -> bool:
 
 
 def caption_filters(i: int, text: str, length: float) -> str:
-    """Big 2-3 word captions timed to the voice. Numbers pop in gold."""
+    """Bold thumbnail-style captions: 2-3 uppercase words at a time, upper part of the screen.
+    The last caption of each scene is red; numbers are gold."""
     words = text.upper().split()
     chunks, cur = [], []
     for w in words:
-        if cur and (len(cur) >= 3 or len(" ".join(cur + [w])) > 16):
+        if cur and (len(cur) >= 3 or len(" ".join(cur + [w])) > 14):
             chunks.append(" ".join(cur))
             cur = []
         cur.append(w)
@@ -187,11 +190,16 @@ def caption_filters(i: int, text: str, length: float) -> str:
         f = WORK / f"cap{i}_{k}.txt"
         f.write_text(chunk)
         end = length if k == len(chunks) - 1 else t + dur
-        color = "0xFFD54A" if any(ch.isdigit() for ch in chunk) else "white"
+        if any(ch.isdigit() for ch in chunk):
+            color = "0xFFD54A"
+        elif k == len(chunks) - 1:
+            color = "0xE8332A"
+        else:
+            color = "white"
         parts.append(
-            f"drawtext=fontfile={FONT}:textfile={f}:expansion=none:fontsize=54:"
-            f"fontcolor={color}:borderw=5:bordercolor=black:shadowx=3:shadowy=3:"
-            "shadowcolor=black@0.6:x=(w-text_w)/2:y=(h-text_h)/2+170:"
+            f"drawtext=fontfile={FONT}:textfile={f}:expansion=none:fontsize={VIDEO_W // 11}:"
+            f"fontcolor={color}:borderw=7:bordercolor=black:shadowx=3:shadowy=3:"
+            "shadowcolor=black@0.7:x=(w-text_w)/2:y=h*0.26:"
             f"enable='between(t,{t:.2f},{end:.2f})'"
         )
         t += dur
@@ -201,7 +209,7 @@ def caption_filters(i: int, text: str, length: float) -> str:
 def render_scene(i: int, scene: dict) -> Path:
     audio, clip, out = WORK / f"a{i}.mp3", WORK / f"c{i}.mp4", WORK / f"s{i}.mp4"
 
-    make_voice(scene["text"], audio)
+    make_voice(scene["text"], audio, scene.get("speaker", "narrator"))
     length = duration(audio) + 0.2
 
     queries = [scene["visual"], scene.get("visual_alt") or scene["visual"].split()[-1],
@@ -210,16 +218,16 @@ def render_scene(i: int, scene: dict) -> Path:
         raise RuntimeError(f"No footage found for scene {i}")
 
     start = random.uniform(0, max(0.0, duration(clip) - length))
-    a, b = (0.30, 0.70) if i % 2 == 0 else (0.70, 0.30)  # slow cinematic pan, alternating
+    a, b = (0.30, 0.70) if i % 2 == 0 else (0.70, 0.30)  # slow pan, alternating
     mark = WORK / "mark.txt"
     mark.write_text(CHANNEL)
     vf = (
-        "scale=-2:1510,scale=w='if(lt(iw,720),720,iw)':h=-2,"
-        f"crop=720:1280:x='(iw-ow)*({a}+({b}-{a})*t/{length:.2f})':y='(ih-oh)/2',"
-        "eq=contrast=1.10:saturation=1.15:gamma=0.97:brightness=-0.02,"
-        "colorbalance=rs=-0.05:bs=0.07:rh=0.07:bh=-0.05,"
-        "vignette=angle=PI/4.5,setsar=1,"
-        f"drawtext=fontfile={FONT}:textfile={mark}:expansion=none:fontsize=24:"
+        f"scale=-2:{VIDEO_H + 230},scale=w='if(lt(iw,{VIDEO_W}),{VIDEO_W},iw)':h=-2:flags=lanczos,"
+        f"crop={VIDEO_W}:{VIDEO_H}:x='(iw-ow)*({a}+({b}-{a})*t/{length:.2f})':y='(ih-oh)/2',"
+        "eq=contrast=1.14:saturation=1.12:gamma=0.97:brightness=-0.03,unsharp=5:5:0.8:5:5:0.0,"
+        "colorbalance=rs=-0.03:gs=0.00:bs=0.08:rh=0.02:bh=-0.04,"
+        "vignette=angle=PI/3.5,setsar=1,"
+        f"drawtext=fontfile={FONT}:textfile={mark}:expansion=none:fontsize={VIDEO_W // 30}:"
         "fontcolor=white@0.6:x=(w-text_w)/2:y=100,"
         + caption_filters(i, scene["text"], length)
     )
@@ -227,7 +235,7 @@ def render_scene(i: int, scene: dict) -> Path:
         ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1", "-ss", f"{start:.2f}",
          "-i", str(clip), "-i", str(audio), "-t", f"{length:.2f}", "-vf", vf,
          "-af", "apad", "-map", "0:v", "-map", "1:a", "-r", "30", "-c:v", "libx264",
-         "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p",
+         "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-ar", "44100", "-ac", "2", str(out)],
         check=True,
     )
@@ -246,26 +254,25 @@ def concat(parts: list) -> Path:
     return final
 
 
-# Original cinematic score made from scratch: a slow dark space pad plus an opening boom.
-PAD = ("0.16*sin(2*PI*55*t)+0.12*sin(2*PI*55.35*t)"
-       "+0.10*sin(2*PI*82.41*t)*(0.75+0.25*sin(2*PI*0.11*t))"
-       "+0.07*sin(2*PI*110*t)*(0.6+0.4*sin(2*PI*0.07*t))"
-       "+0.05*sin(2*PI*130.81*t)*(0.5+0.5*sin(2*PI*0.05*t+1))"
-       "+0.04*sin(2*PI*164.81*t)*(0.5+0.5*sin(2*PI*0.09*t+2))")
-BOOM = "0.9*sin(2*PI*(28+110*exp(-5*t))*t)*exp(-2.5*t)"
+# Original eerie score made from scratch: a slow dark drone plus an opening low thud.
+PAD = ("0.16*sin(2*PI*44*t)+0.12*sin(2*PI*44.6*t)"
+       "+0.09*sin(2*PI*66*t)*(0.7+0.3*sin(2*PI*0.09*t))"
+       "+0.06*sin(2*PI*93.2*t)*(0.5+0.5*sin(2*PI*0.06*t+1))"
+       "+0.04*sin(2*PI*123.5*t)*(0.4+0.6*sin(2*PI*0.04*t+2))")
+BOOM = "0.9*sin(2*PI*(22+90*exp(-5*t))*t)*exp(-2.5*t)"
 
 
 def finish(src: Path, dst: Path) -> None:
-    """Final pass: voice polish, cinematic music that ducks under the voice, 720p, small file."""
+    """Final pass: voice polish, eerie music that ducks under the voice, 720p, small file."""
     dur = duration(src)
     audio_graph = (
         "[0:a]highpass=f=60,equalizer=f=130:t=q:w=1.2:g=2.5,equalizer=f=3200:t=q:w=1:g=1.5,"
         "acompressor=threshold=0.08:ratio=3:attack=5:release=150:makeup=2,"
         "aecho=0.85:0.5:40|85:0.22|0.10,asplit=2[vo][vsc];"
-        f"[1:a]lowpass=f=500,aecho=0.8:0.88:600|1000:0.35|0.22,volume=0.18,"
+        f"[1:a]lowpass=f=450,aecho=0.8:0.88:600|1000:0.35|0.22,volume=0.18,"
         f"afade=t=in:d=2,afade=t=out:st={max(dur - 2.5, 0):.2f}:d=2.5,"
         "aformat=channel_layouts=stereo[pad];"
-        "[2:a]lowpass=f=220,volume=0.7,aformat=channel_layouts=stereo[boom];"
+        "[2:a]lowpass=f=200,volume=0.7,aformat=channel_layouts=stereo[boom];"
         "[pad][vsc]sidechaincompress=threshold=0.03:ratio=10:attack=15:release=450[duck];"
         "[vo]aformat=channel_layouts=stereo[vos];"
         "[vos][duck][boom]amix=inputs=3:duration=first:normalize=0,"
@@ -280,7 +287,7 @@ def finish(src: Path, dst: Path) -> None:
              "-f", "lavfi", "-i", f"aevalsrc={PAD}:s=44100:d={dur:.2f}",
              "-f", "lavfi", "-i", f"aevalsrc={BOOM}:s=44100:d=2",
              "-filter_complex", audio_graph, "-map", "[vout]", "-map", "[aout]",
-             "-c:v", "libx264", "-preset", "medium", "-b:v", f"{vk}k",
+             "-c:v", "libx264", "-preset", "slow", "-b:v", f"{vk}k",
              "-maxrate", f"{int(vk * 1.25)}k", "-bufsize", f"{vk * 2}k",
              "-pix_fmt", "yuv420p", "-profile:v", "high", "-r", "30",
              "-c:a", "aac", "-b:a", "80k", "-ar", "44100",
@@ -294,7 +301,7 @@ def finish(src: Path, dst: Path) -> None:
 def main() -> None:
     history = json.loads(HISTORY.read_text()) if HISTORY.exists() else []
     script_file = os.environ.get("SCRIPT_FILE", "").strip()
-    if script_file:  # render a script you wrote yourself, e.g. earth_facts.json
+    if script_file:  # render a story you wrote yourself
         script = json.loads(Path(script_file).read_text(encoding="utf-8"))
         print("Using script file:", script_file)
     else:
@@ -309,15 +316,14 @@ def main() -> None:
     finish(final, out / "short.mp4")
     title = f"{script['title']} #Shorts"
     hashtags = build_hashtags(script)
+    ending = "This is a fictional story about the universe. Comment your choice, and follow for the next one!"
     (out / "title.txt").write_text(title)
     (out / "description.txt").write_text(
-        f"{script['description']}\n\nFollow for a new mind-blowing fact every day!\n\n"
-        f"{' '.join(hashtags)}\n"
+        f"{script['description']}\n\n{ending}\n\n{' '.join(hashtags)}\n"
     )
     (out / "notes.txt").write_text(
         f"TITLE (copy this):\n{title}\n\n"
-        f"DESCRIPTION (copy this):\n{script['description']}\n\n"
-        f"Follow for a new mind-blowing fact every day!\n\n{' '.join(hashtags)}\n"
+        f"DESCRIPTION (copy this):\n{script['description']}\n\n{ending}\n\n{' '.join(hashtags)}\n"
     )
 
     history.append({"topic": script["topic"], "title": script["title"]})
