@@ -1,8 +1,7 @@
 """
-Narration voice with automatic fallbacks:
-Kokoro (free, offline, no quota) -> Gemini TTS -> Microsoft Edge -> Google TTS -> offline espeak.
-Kokoro voices: af_sarah (Sarah, American female), am_adam (Adam, American male),
-bm_lewis (Lewis, British male).
+Narration with several voices per video (narrator plus characters).
+Order: Kokoro (free, offline, no quota) -> Gemini TTS -> Microsoft Edge -> Google TTS -> espeak.
+Each scene names a speaker role: narrator, female, male_brit, young, old or gruff.
 """
 import asyncio
 import base64
@@ -16,16 +15,30 @@ import edge_tts
 import requests
 
 # ---- Voice settings ----
-KOKORO_VOICE = "af_sarah"  # "af_sarah", "am_adam" or "bm_lewis"
+# Kokoro voices per role (American = a..., British = b...). Change any name to another Kokoro voice.
+KOKORO_VOICES = {
+    "narrator": "am_adam",
+    "female": "af_sarah",
+    "male_brit": "bm_lewis",
+    "young": "af_bella",
+    "old": "bm_george",
+    "gruff": "am_michael",
+}
+GEMINI_VOICES = {  # Gemini TTS prebuilt voices, used only if Kokoro fails
+    "narrator": "Charon", "female": "Kore", "male_brit": "Puck",
+    "young": "Aoede", "old": "Orus", "gruff": "Fenrir",
+}
+EDGE_VOICES = {  # Microsoft Edge voices, used only if Gemini fails
+    "narrator": "en-US-GuyNeural", "female": "en-US-AriaNeural", "male_brit": "en-GB-RyanNeural",
+    "young": "en-US-JennyNeural", "old": "en-GB-RyanNeural", "gruff": "en-US-GuyNeural",
+}
 GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
-GEMINI_VOICE = "Charon"
-STYLE = ("Say in a deep, confident, awe-struck documentary narrator voice, like a space "
-         "film trailer. Fast, energetic, punchy pace, dramatic, with very short pauses")
-EDGE_VOICES = ["en-US-GuyNeural", "en-US-AriaNeural"]
-SPEED = 1.20  # extra speed-up applied to every voice (1.0 = normal)
+STYLE = ("Say in an expressive, cinematic voice with clear emotion, dramatic pauses and "
+         "a steady, engaging pace")
+SPEED = 1.10  # extra speed-up applied to every voice (1.0 = normal)
 # ------------------------
 
-_kokoro_pipe = None
+_kokoro_pipes = {}
 _kokoro_failed = False
 _gemini_failed = False
 _edge_failed = False
@@ -35,9 +48,9 @@ def _ok(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 1000
 
 
-def _kokoro(text: str, path: Path) -> bool:
+def _kokoro(text: str, path: Path, voice_id: str) -> bool:
     """Kokoro runs locally. Its model is downloaded once per run from Hugging Face."""
-    global _kokoro_pipe, _kokoro_failed
+    global _kokoro_failed
     if _kokoro_failed:
         return False
     try:
@@ -45,10 +58,10 @@ def _kokoro(text: str, path: Path) -> bool:
         import soundfile as sf
         from kokoro import KPipeline
 
-        if _kokoro_pipe is None:
-            lang = "b" if KOKORO_VOICE.startswith("b") else "a"  # b = British, a = American
-            _kokoro_pipe = KPipeline(lang_code=lang)
-        chunks = [audio for _, _, audio in _kokoro_pipe(text, voice=KOKORO_VOICE, speed=1.0)]
+        lang = "b" if voice_id.startswith("b") else "a"  # b = British, a = American
+        if lang not in _kokoro_pipes:
+            _kokoro_pipes[lang] = KPipeline(lang_code=lang)
+        chunks = [audio for _, _, audio in _kokoro_pipes[lang](text, voice=voice_id, speed=1.0)]
         if not chunks:
             raise RuntimeError("no audio returned")
         wav = path.with_suffix(".wav")
@@ -77,7 +90,7 @@ def _pcm_to_mp3(pcm: bytes, rate: int, path: Path) -> None:
     )
 
 
-def _gemini(text: str, path: Path) -> bool:
+def _gemini(text: str, path: Path, role: str) -> bool:
     global _gemini_failed
     key = os.environ.get("GEMINI_API_KEY")
     if not key or _gemini_failed:
@@ -86,7 +99,8 @@ def _gemini(text: str, path: Path) -> bool:
         "contents": [{"parts": [{"text": f"{STYLE}: {text}"}]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": GEMINI_VOICE}}},
+            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {
+                "voiceName": GEMINI_VOICES.get(role, GEMINI_VOICES["narrator"])}}},
         },
     }
     for model in GEMINI_TTS_MODELS:
@@ -126,21 +140,20 @@ async def _edge(text: str, path: Path, voice: str) -> None:
     await edge_tts.Communicate(text, voice, rate="+2%").save(str(path))
 
 
-def _make_voice_raw(text: str, path: Path) -> None:
+def _make_voice_raw(text: str, path: Path, role: str) -> None:
     global _edge_failed
-    if _kokoro(text, path):
+    if _kokoro(text, path, KOKORO_VOICES.get(role, KOKORO_VOICES["narrator"])):
         return
-    if _gemini(text, path):
+    if _gemini(text, path, role):
         return
     if not _edge_failed:
         errors = []
-        for voice in EDGE_VOICES:
-            try:
-                asyncio.run(_edge(text, path, voice))
-                if _ok(path):
-                    return
-            except Exception as e:
-                errors.append(f"edge/{voice}: {type(e).__name__}")
+        try:
+            asyncio.run(_edge(text, path, EDGE_VOICES.get(role, EDGE_VOICES["narrator"])))
+            if _ok(path):
+                return
+        except Exception as e:
+            errors.append(type(e).__name__)
         _edge_failed = True
         print("Edge TTS failed:", errors)
     try:
@@ -158,9 +171,9 @@ def _make_voice_raw(text: str, path: Path) -> None:
     )
 
 
-def make_voice(text: str, path: Path) -> None:
-    """Create the narration for one scene and speed it up slightly (pitch is kept)."""
-    _make_voice_raw(text, path)
+def make_voice(text: str, path: Path, role: str = "narrator") -> None:
+    """Create the narration for one scene with the chosen voice role, then speed it up slightly."""
+    _make_voice_raw(text, path, role)
     fast = path.with_name(path.stem + "_fast.mp3")
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
