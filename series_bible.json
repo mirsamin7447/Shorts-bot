@@ -1,0 +1,52 @@
+{
+  "series": "Seven Crew. Eight Voices.",
+  "episodes": 30,
+  "setting": "A deep-space research station near a neutron star forty light-years away. Fictional story.",
+  "characters": {
+    "narrator": "Calm, wondrous narrator who sets the scene and reveals key facts.",
+    "female": "Mara, the station's navigator. The signal says her name. She speaks in first person when she is the one talking.",
+    "male_brit": "Commander Hale, the calm leader and skeptic. He wants safety above all.",
+    "young": "Jin, the young engineer who found the signal. Brave and curious.",
+    "old": "Dr. Ruth, the oldest scientist. She knows the station's history and the star's past.",
+    "gruff": "Voss, security chief. Blunt and suspicious. Also used for 'The Eighth', the unseen presence."
+  },
+  "rules": [
+    "Each episode is 30-40 seconds with 6-12 scenes and 2-4 speakers in the same room.",
+    "Characters talk to each other, not just to the viewer.",
+    "Open with a short recap line, then advance the story.",
+    "End on a cliffhanger, except the final episode, which resolves the story.",
+    "Every episode ends with a choice for viewers, for example 'Comment A or B'."
+  ],
+  "beats": [
+    "The signal says Mara's name for the first time.",
+    "The source is a neutron star forty light-years away, and a countdown begins.",
+    "Commander Hale orders silence, and the lights start flickering.",
+    "An eighth voice speaks inside the room, but the crew counts only seven.",
+    "Dr. Ruth recognizes the pulse pattern from old station records.",
+    "Jin finds a hidden log dated sixty years ago.",
+    "The log is written in Mara's handwriting.",
+    "Voss seals the station, and the main door will not open.",
+    "The countdown reaches one thousand, then pauses.",
+    "The Eighth shows each crew member a glimpse of their own future.",
+    "The crew argues, and Hale wants to abort the mission.",
+    "Mara walks to the signal console in her sleep.",
+    "Jin discovers the signal is a map of the station itself.",
+    "A second station appears on the screen, identical to theirs.",
+    "Ruth reveals that the first crew vanished at the same star.",
+    "Voss opens a sealed room with eight beds in it.",
+    "The eighth bed has Mara's name tag on it.",
+    "Mara's memories have gaps, and she starts counting again.",
+    "Hale sends a message to Earth, and a reply arrives in his own voice.",
+    "The power dies, and emergency lights show a figure in the corridor.",
+    "The Eighth offers a deal: one person can leave the station alive.",
+    "The crew votes, and the vote is a tie.",
+    "Jin sacrifices his oxygen to open a vent and let Mara through.",
+    "The station splits in two, and both halves think they are the original.",
+    "Ruth decodes the signal and finds it is an invitation.",
+    "Mara realizes the Eighth is her, from another timeline.",
+    "Hale chooses to go with the Eighth to save the rest of the crew.",
+    "The crew must decide whether to destroy the star.",
+    "The countdown stops, and the galaxy falls silent.",
+    "Finale: the crew hears eight voices from far away, saying they are still counting."
+  ]
+}
