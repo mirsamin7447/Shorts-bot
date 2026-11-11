@@ -47,6 +47,7 @@ MAX_BYTES = 4_700_000  # Make.com's free plan accepts files up to 5 MB
 WORK = Path("work")
 WORK.mkdir(exist_ok=True)
 HISTORY = Path("history.json")
+SERIES_BIBLE = Path("series_bible.json")  # the 30-episode series; episodes are written in order
 
 
 def ask_ai(prompt: str) -> str:
@@ -89,9 +90,55 @@ def build_hashtags(script: dict) -> list:
     return [f"#{t}" for t in tags[: MAX_HASHTAGS - 1]] + ["#Shorts"]
 
 
+def series_position(history: list):
+    """Returns (episode number, last episode summary, bible) while the series runs, else None."""
+    if not SERIES_BIBLE.exists():
+        return None
+    bible = json.loads(SERIES_BIBLE.read_text(encoding="utf-8"))
+    done = [h for h in history if "episode" in h]
+    n = len(done) + 1
+    if n > bible["episodes"]:
+        return None  # series finished: fall back to normal stories
+    last = done[-1].get("summary", "") if done else "This is the first episode."
+    return n, last, bible
+
+
 def generate_script(history: list) -> dict:
     used = [h["topic"] for h in history[-60:]]
     fmt = pick_format()
+    series = series_position(history)
+    if series:
+        n, last_summary, bible = series
+        beat = bible["beats"][n - 1]
+        prompt = (
+            f"You write episodes of a continuing YouTube Shorts series.\n"
+            f"SERIES BIBLE: {json.dumps(bible, ensure_ascii=False)}\n\n"
+            f"This is episode {n} of {bible['episodes']}.\n"
+            f"Story beat for this episode: {beat}\n"
+            f"Previous episode summary: {last_summary}\n\n"
+            "Write the episode as a short scene with 2-4 characters in the same room who talk to each other. "
+            "Keep the characters consistent with the bible. Length: 30-40 seconds, about 75-100 spoken words. "
+            "Open with a one-line recap, then advance the story to the beat. "
+            "End on a cliffhanger unless this is the final episode, which resolves the story. "
+            "Finish with a choice for viewers, for example 'Comment A if we run, B if we ask it what it wants.' "
+            "Do not say follow or subscribe. This is fiction.\n\n"
+            "Return ONLY JSON with keys:\n"
+            '"topic" (short episode name), "title" (under 50 chars, starting with "Ep N:"), '
+            '"summary" (1-2 sentences of what happens, for the next episode), '
+            '"description" (2 sentences, saying it is a fictional story and what happens), '
+            '"tags" (6-8 keywords, no # symbol), '
+            '"hashtags" (2-3 hashtags, no # symbol), '
+            '"scenes": list of 6-12 objects {"speaker": narrator, female, male_brit, young, old or gruff, '
+            '"text": words spoken, "visual": 2-3 word stock-video search that matches the scene, '
+            '"visual_alt": one simple backup word}.'
+        )
+        raw = ask_ai(prompt)
+        raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
+        data = json.loads(raw)
+        assert 5 <= len(data["scenes"]) <= 14, "unexpected scene count"
+        data["episode"] = n
+        return data
+    used = [h["topic"] for h in history[-60:]]
     raw = ask_ai(
         f"You write awe-inspiring, cinematic YouTube Shorts for a channel about {NICHE}.\n"
         f"Format for this video: {fmt}\n"
@@ -326,7 +373,11 @@ def main() -> None:
         f"DESCRIPTION (copy this):\n{script['description']}\n\n{ending}\n\n{' '.join(hashtags)}\n"
     )
 
-    history.append({"topic": script["topic"], "title": script["title"]})
+    entry = {"topic": script["topic"], "title": script["title"]}
+    if "episode" in script:
+        entry["episode"] = script["episode"]
+        entry["summary"] = script.get("summary", "")
+    history.append(entry)
     HISTORY.write_text(json.dumps(history, indent=2))
     print("Hashtags:", " ".join(hashtags))
     print("Saved out/short.mp4")
