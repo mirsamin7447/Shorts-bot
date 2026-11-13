@@ -28,5 +28,11 @@
     "title": "Ep 5: The Old Pattern",
     "episode": 5,
     "summary": "Dr. Ruth recognizes the mysterious pulse pattern from classified station archives recorded decades ago. The crew must choose whether to decode the old distress call or erase the archives."
+  },
+  {
+    "topic": "The Sixty-Year-Old Log",
+    "title": "Ep 6: The Sixty-Year Log",
+    "episode": 6,
+    "summary": "Jin uncovers a hidden log timestamped sixty years ago that is actively broadcasting from inside the station. The crew must choose whether to open the file or purge the server."
   }
 ]
