@@ -58,5 +58,11 @@
     "title": "Ep 10: Glimpse of Future",
     "episode": 10,
     "summary": "The Eighth reveals terrifying visions of each crew member's future on the viewports."
+  },
+  {
+    "topic": "Mission Abort",
+    "title": "Ep 11: Mission Aborted",
+    "episode": 11,
+    "summary": "Commander Hale attempts to abort the mission after the future visions, but the station locks controls and steers toward the star."
   }
 ]
